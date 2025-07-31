@@ -244,6 +244,12 @@ func (c *GlusterCLI) getLocalIP() (string, error) {
 }
 
 func (c *GlusterCLI) startGlusterContainer(localPath, nodeIP string) error {
+	// Check if required ports are available
+	fmt.Println("🔍 Checking port availability...")
+	if err := c.checkPortsAvailable(); err != nil {
+		return err
+	}
+
 	// Pull image if not present
 	fmt.Println("📥 Pulling GlusterFS image...")
 	pullCmd := exec.Command("docker", "pull", GlusterImage)
@@ -260,19 +266,17 @@ func (c *GlusterCLI) startGlusterContainer(localPath, nodeIP string) error {
 	// Remove existing container if it exists
 	exec.Command("docker", "rm", "-f", ContainerName).Run()
 
-	// Start container
+	// Start container (removed redundant port mappings since using --net host)
 	dockerCmd := exec.Command("docker", "run", "-d",
 		"--name", ContainerName,
 		"--privileged",
-		"--net", "host",
-		"-p", fmt.Sprintf("%s:%s", GlusterPort, GlusterPort),
-		"-p", fmt.Sprintf("%s:%s", BrickPort, BrickPort),
-		"-v", fmt.Sprintf("%s:/data/glusterfs:rw", brickPath),
-		"-v", fmt.Sprintf("%s:/mnt/shared:rw", localPath),
+		"--net", "host", // Use host networking - exposes all container ports automatically
+		"-v", fmt.Sprintf("%s:/data/glusterfs:rw", brickPath), // Gluster brick
+		"-v", fmt.Sprintf("%s:/mnt/shared:rw", localPath), // User's shared folder
 		"-e", fmt.Sprintf("NODE_IP=%s", nodeIP),
 		"--hostname", "gluster-node",
 		GlusterImage,
-		"sh", "-c", "glusterd --no-daemon --log-level=INFO")
+		"sh", "-c", "glusterd --no-daemon --log-level=INFO") // Start glusterd
 
 	if err := dockerCmd.Run(); err != nil {
 		return fmt.Errorf("failed to start container: %v", err)
@@ -408,6 +412,73 @@ func (c *GlusterCLI) createClusterVolume(allPeerIPs []string) error {
 	}
 
 	return nil
+}
+
+func (c *GlusterCLI) checkPortsAvailable() error {
+	requiredPorts := []string{GlusterPort, BrickPort}
+
+	for _, port := range requiredPorts {
+		if !c.isPortAvailable(port) {
+			// Try to identify what's using the port
+			processInfo := c.getProcessUsingPort(port)
+			if processInfo != "" {
+				return fmt.Errorf("❌ Port %s is already in use by: %s\n💡 Please stop the conflicting service or choose a different port", port, processInfo)
+			}
+			return fmt.Errorf("❌ Port %s is already in use. Please free the port or stop the conflicting service", port)
+		}
+		fmt.Printf("✅ Port %s is available\n", port)
+	}
+
+	return nil
+}
+
+func (c *GlusterCLI) isPortAvailable(port string) bool {
+	// Check if port is available by attempting to bind to it
+	listener, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		return false // Port is not available
+	}
+	defer listener.Close()
+	return true // Port is available
+}
+
+func (c *GlusterCLI) getProcessUsingPort(port string) string {
+	// Try to identify the process using the port (works on Unix-like systems)
+	cmd := exec.Command("lsof", "-i", ":"+port, "-t")
+	output, err := cmd.Output()
+	if err != nil {
+		// Fallback to netstat if lsof fails
+		cmd = exec.Command("netstat", "-tlnp")
+		output, err = cmd.Output()
+		if err != nil {
+			return ""
+		}
+		// Parse netstat output for the port
+		lines := strings.Split(string(output), "\n")
+		for _, line := range lines {
+			if strings.Contains(line, ":"+port) {
+				fields := strings.Fields(line)
+				if len(fields) > 6 {
+					return strings.TrimSpace(fields[6])
+				}
+			}
+		}
+		return ""
+	}
+
+	pid := strings.TrimSpace(string(output))
+	if pid == "" {
+		return ""
+	}
+
+	// Get process name from PID
+	cmd = exec.Command("ps", "-p", pid, "-o", "comm=")
+	output, err = cmd.Output()
+	if err != nil {
+		return "PID " + pid
+	}
+
+	return strings.TrimSpace(string(output)) + " (PID " + pid + ")"
 }
 
 func (c *GlusterCLI) isNodeRunning() bool {
