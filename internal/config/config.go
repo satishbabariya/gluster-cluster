@@ -20,10 +20,9 @@ type Config struct {
 	// Volume configuration
 	Volumes []VolumeConfig `mapstructure:"volumes" yaml:"volumes"`
 
-	// Docker configuration
-	GlusterImage        string `mapstructure:"gluster_image" yaml:"gluster_image"`
-	GlusterManagerImage string `mapstructure:"gluster_manager_image" yaml:"gluster_manager_image"`
-	NetworkName         string `mapstructure:"network_name" yaml:"network_name"`
+	// Docker configuration (Manager removed - peer-to-peer architecture)
+	GlusterImage string `mapstructure:"gluster_image" yaml:"gluster_image"`
+	NetworkName  string `mapstructure:"network_name" yaml:"network_name"`
 
 	// Storage configuration
 	DataPath   string `mapstructure:"data_path" yaml:"data_path"`
@@ -56,7 +55,7 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("replica_count", 3)
 	viper.SetDefault("network_subnet", "172.20.0.0/16")
 	viper.SetDefault("gluster_image", "gluster/gluster-centos:latest")
-	viper.SetDefault("gluster_manager_image", "gluster-cluster/manager:latest")
+	// Manager image removed - peer-to-peer architecture
 	viper.SetDefault("network_name", "gluster-net")
 	viper.SetDefault("data_path", "/data/glusterfs")
 	viper.SetDefault("backup_path", "./backups")

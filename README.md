@@ -18,8 +18,7 @@ A Go-based, plug-and-play GlusterFS cluster management utility for multi-node en
 ### 1. Pull Images from Registry
 
 ```bash
-# Pull the latest images
-docker pull gluster-cluster/manager:latest
+# Pull the latest images (peer-to-peer architecture)
 docker pull gluster-cluster/node:latest
 docker pull gluster-cluster/client:latest
 ```
@@ -95,7 +94,7 @@ GLUSTER_VOLUMES="shared:replicated:3:/mnt/shared/tomcat-resources:/opt/tomcat/we
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `GLUSTER_NODE_IMAGE` | GlusterFS node image | `gluster-cluster/node:latest` |
-| `GLUSTER_MANAGER_IMAGE` | Cluster manager image | `gluster-cluster/manager:latest` |
+| ~~`GLUSTER_MANAGER_IMAGE`~~ | **Removed** - Peer-to-peer architecture | N/A - No manager needed |
 | `GLUSTER_CLIENT_IMAGE` | GlusterFS client image | `gluster-cluster/client:latest` |
 
 ## Usage Examples
@@ -189,17 +188,14 @@ docker-compose -f deployments/docker/docker-compose.yml down
 # Build the CLI tools
 make dev-build
 
-# Start cluster
-./bin/gluster-manager start
+# Test node binary
+./bin/gluster-node --help
 
-# Check status
-./bin/gluster-manager status
-
-# Show configuration
-./bin/gluster-manager config
-
-# Stop cluster
-./bin/gluster-manager stop
+# Peer-to-peer management (no separate manager needed):
+docker exec gluster-cluster-node1 gluster peer probe gluster-cluster-node2
+docker exec gluster-cluster-node1 gluster volume create shared replica 3 ...
+docker exec gluster-cluster-node1 gluster volume start shared
+docker exec gluster-cluster-node1 gluster volume status shared
 ```
 
 ## Kubernetes Deployment
@@ -257,7 +253,7 @@ make push REGISTRY=your-registry.com/gluster-cluster
 
 # Use in deployment
 export GLUSTER_NODE_IMAGE=your-registry.com/gluster-cluster/node:latest
-export GLUSTER_MANAGER_IMAGE=your-registry.com/gluster-cluster/manager:latest
+# Manager removed - peer-to-peer architecture
 ```
 
 ## Architecture

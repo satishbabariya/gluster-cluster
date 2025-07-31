@@ -8,8 +8,7 @@ VERSION ?= latest
 GLUSTER_CLUSTER_NAME ?= gluster-cluster
 DOCKER_COMPOSE_FILE ?= deployments/docker/docker-compose.yml
 
-# Docker images
-MANAGER_IMAGE = $(REGISTRY)/manager:$(VERSION)
+# Docker images (Manager removed - peer-to-peer architecture)
 NODE_IMAGE = $(REGISTRY)/node:$(VERSION)
 CLIENT_IMAGE = $(REGISTRY)/client:$(VERSION)
 
@@ -20,13 +19,11 @@ help: ## Show this help message
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 build: ## Build all Docker images
-	@echo "Building GlusterFS cluster images..."
-	docker build -f deployments/docker/Dockerfile.gluster-manager -t $(MANAGER_IMAGE) .
+	@echo "Building GlusterFS cluster images (peer-to-peer architecture)..."
 	docker build -f deployments/docker/Dockerfile.gluster-node -t $(NODE_IMAGE) .
 	docker build -f deployments/docker/Dockerfile.gluster-client -t $(CLIENT_IMAGE) .
 
-build-manager: ## Build manager image
-	docker build -f deployments/docker/Dockerfile.gluster-manager -t $(MANAGER_IMAGE) .
+# Manager removed - GlusterFS nodes are peer-to-peer and self-managing
 
 build-node: ## Build node image
 	docker build -f deployments/docker/Dockerfile.gluster-node -t $(NODE_IMAGE) .
@@ -36,7 +33,6 @@ build-client: ## Build client image
 
 push: build ## Build and push all images to registry
 	@echo "Pushing images to registry..."
-	docker push $(MANAGER_IMAGE)
 	docker push $(NODE_IMAGE)
 	docker push $(CLIENT_IMAGE)
 
@@ -62,19 +58,18 @@ status: ## Show cluster status
 	docker-compose -f $(DOCKER_COMPOSE_FILE) ps
 	@echo ""
 	@echo "=== GlusterFS Cluster Status ==="
-	@if docker ps --format "table {{.Names}}" | grep -q "$(GLUSTER_CLUSTER_NAME)-manager"; then \
-		docker exec $(GLUSTER_CLUSTER_NAME)-manager gluster-manager status || echo "Manager not ready yet"; \
+	@echo "Cluster Status (peer-to-peer architecture):"
+	@if docker ps --format "table {{.Names}}" | grep -q "$(GLUSTER_CLUSTER_NAME)-node1"; then \
+		docker exec $(GLUSTER_CLUSTER_NAME)-node1 gluster peer status || echo "Node1 not ready yet"; \
+		docker exec $(GLUSTER_CLUSTER_NAME)-node1 gluster volume status || echo "No volumes configured yet"; \
 	else \
-		echo "Manager container not running"; \
+		echo "Node1 container not running"; \
 	fi
 
 logs: ## Show logs from all services
 	docker-compose -f $(DOCKER_COMPOSE_FILE) logs -f
 
-logs-manager: ## Show manager logs
-	docker-compose -f $(DOCKER_COMPOSE_FILE) logs -f gluster-manager
-
-logs-nodes: ## Show node logs
+logs-nodes: ## Show all node logs
 	docker-compose -f $(DOCKER_COMPOSE_FILE) logs -f gluster-node1 gluster-node2 gluster-node3
 
 restart: stop start ## Restart the cluster
@@ -99,7 +94,6 @@ dev-setup: ## Setup development environment
 
 dev-build: ## Build Go binaries for development
 	@echo "Building Go binaries..."
-	go build -o bin/gluster-manager ./cmd/gluster-manager
 	go build -o bin/gluster-node ./cmd/gluster-node
 
 dev-test: ## Run Go tests

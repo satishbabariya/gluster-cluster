@@ -1,34 +1,11 @@
 version: '3.8'
 
-services:
-  # GlusterFS Manager
-  gluster-manager:
-    image: ${GLUSTER_MANAGER_IMAGE:-gluster-cluster/manager:latest}
-    build:
-      context: ../../
-      dockerfile: deployments/docker/Dockerfile.gluster-manager
-    container_name: ${GLUSTER_CLUSTER_NAME:-gluster-cluster}-manager
-    networks:
-      - gluster-net
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./config:/config
-    environment:
-      - GLUSTER_CLUSTER_NAME=${GLUSTER_CLUSTER_NAME:-gluster-cluster}
-      - GLUSTER_NODE_IPS=${GLUSTER_NODE_IPS:-192.168.100.10,192.168.100.11,192.168.100.12}
-      - GLUSTER_REPLICA_COUNT=${GLUSTER_REPLICA_COUNT:-3}
-      - GLUSTER_NETWORK_SUBNET=${GLUSTER_NETWORK_SUBNET:-192.168.100.0/24}
-      - GLUSTER_NETWORK_NAME=${GLUSTER_NETWORK_NAME:-gluster-net}
-      - GLUSTER_DATA_PATH=${GLUSTER_DATA_PATH:-/data/glusterfs}
-      - GLUSTER_VOLUMES=${GLUSTER_VOLUMES:-shared:replicated:3:/mnt/shared/tomcat-resources,/mnt/shared/app-data:/mnt/shared}
-      - GLUSTER_LOG_LEVEL=${GLUSTER_LOG_LEVEL:-info}
-    depends_on:
-      - gluster-node1
-      - gluster-node2
-      - gluster-node3
-    restart: unless-stopped
+# SIMPLIFIED ARCHITECTURE: No Manager Needed!
+# GlusterFS nodes are peer-to-peer and self-managing
+# Management commands: docker exec gluster-cluster-node1 gluster <command>
 
-  # GlusterFS Nodes
+services:
+  # GlusterFS Node 1 - Equal peer with management capabilities
   gluster-node1:
     image: ${GLUSTER_NODE_IMAGE:-gluster-cluster/node:latest}
     build:
@@ -53,7 +30,13 @@ services:
       - "${GLUSTER_NODE1_PORT:-25007}:24007"
       - "${GLUSTER_NODE1_BRICK_PORT:-50152}:49152"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-x", "glusterd"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
+  # GlusterFS Node 2 - Equal peer with management capabilities  
   gluster-node2:
     image: ${GLUSTER_NODE_IMAGE:-gluster-cluster/node:latest}
     build:
@@ -78,7 +61,13 @@ services:
       - "${GLUSTER_NODE2_PORT:-25008}:24007"
       - "${GLUSTER_NODE2_BRICK_PORT:-50153}:49152"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-x", "glusterd"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
+  # GlusterFS Node 3 - Equal peer with management capabilities
   gluster-node3:
     image: ${GLUSTER_NODE_IMAGE:-gluster-cluster/node:latest}
     build:
@@ -103,24 +92,13 @@ services:
       - "${GLUSTER_NODE3_PORT:-25009}:24007"
       - "${GLUSTER_NODE3_BRICK_PORT:-50154}:49152"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-x", "glusterd"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Example Application using GlusterFS
-  tomcat-app:
-    image: tomcat:9-jre11
-    container_name: ${GLUSTER_CLUSTER_NAME:-gluster-cluster}-tomcat-app
-    depends_on:
-      - gluster-manager
-    networks:
-      - gluster-net
-    ports:
-      - "${TOMCAT_PORT:-8080}:8080"
-    volumes:
-      - gluster-shared-volume:/opt/tomcat/webapps/zenoptics/resources:rw
-    environment:
-      - CATALINA_OPTS=-Xmx512m
-    restart: unless-stopped
-
-  # GlusterFS Client for mounting volumes
+  # GlusterFS Client - Mounts the shared volume
   gluster-client:
     image: ${GLUSTER_CLIENT_IMAGE:-gluster-cluster/client:latest}
     build:
@@ -129,26 +107,53 @@ services:
     hostname: ${GLUSTER_CLUSTER_NAME:-gluster-cluster}-client
     container_name: ${GLUSTER_CLUSTER_NAME:-gluster-cluster}-client
     privileged: true
-    depends_on:
-      - gluster-manager
     networks:
       - gluster-net
     volumes:
-      - gluster-shared-volume:/mnt/shared:rw
+      - shared-storage:/mnt/shared
     environment:
       - GLUSTER_CLUSTER_NAME=${GLUSTER_CLUSTER_NAME:-gluster-cluster}
-      - GLUSTER_SERVER=${GLUSTER_CLUSTER_NAME:-gluster-cluster}-node1
-      - GLUSTER_VOLUME=shared
+      - GLUSTER_SERVER=gluster-cluster-node1
+      - GLUSTER_VOLUME=${GLUSTER_VOLUME_NAME:-shared}
       - MOUNT_POINT=/mnt/shared
+      - RETRY_COUNT=30
+      - RETRY_DELAY=5
+    depends_on:
+      - gluster-node1
+      - gluster-node2
+      - gluster-node3
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mount", "|", "grep", "glusterfs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Example application - Tomcat using the shared volume
+  tomcat-app:
+    image: tomcat:9-jre11
+    hostname: ${GLUSTER_CLUSTER_NAME:-gluster-cluster}-tomcat-app
+    container_name: ${GLUSTER_CLUSTER_NAME:-gluster-cluster}-tomcat-app
+    networks:
+      - gluster-net
+    volumes:
+      - shared-storage:/opt/tomcat/webapps/zenoptics/resources:rw
+    ports:
+      - "${TOMCAT_PORT:-8080}:8080"
+    depends_on:
+      - gluster-client
     restart: unless-stopped
 
+# Network configuration
 networks:
   gluster-net:
     driver: bridge
     ipam:
       config:
-        - subnet: ${GLUSTER_NETWORK_SUBNET:-192.168.100.0/24}
+        - subnet: 192.168.100.0/24
+          gateway: 192.168.100.1
 
+# Volume definitions  
 volumes:
   gluster-cluster-node1-data:
     driver: local
@@ -156,5 +161,11 @@ volumes:
     driver: local
   gluster-cluster-node3-data:
     driver: local
-  gluster-shared-volume:
+  shared-storage:
     driver: local
+
+# Management Commands (run from any node):
+# Setup cluster: docker exec gluster-cluster-node1 gluster peer probe gluster-cluster-node2
+# Create volume: docker exec gluster-cluster-node1 gluster volume create shared replica 3 node1:/data/glusterfs/shared node2:/data/glusterfs/shared node3:/data/glusterfs/shared force
+# Start volume: docker exec gluster-cluster-node1 gluster volume start shared
+# Check status: docker exec gluster-cluster-node1 gluster volume status shared
