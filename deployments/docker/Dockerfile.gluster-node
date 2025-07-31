@@ -52,25 +52,8 @@ ENV CLUSTER_NAME="gluster-cluster"
 ENV GLUSTER_DATA_PATH="/data/glusterfs"
 ENV GLUSTER_LOG_LEVEL="info"
 
-# Create startup script that uses the official image's glusterd setup
-RUN printf '#!/bin/bash\n\
-set -e\n\
-echo "Starting GlusterFS node: $NODE_NAME"\n\
-\n\
-# Ensure required directories exist\n\
-mkdir -p /var/log/glusterfs\n\
-mkdir -p /var/lib/glusterd\n\
-mkdir -p /data/glusterfs\n\
-\n\
-# Start glusterd (official image may have its own startup)\n\
-if ! pgrep -x "glusterd" > /dev/null; then\n\
-    echo "Starting glusterd..."\n\
-    /usr/sbin/glusterd --pid-file=/var/run/glusterd.pid --log-file=/var/log/glusterfs/glusterd.log &\n\
-    sleep 5\n\
-fi\n\
-\n\
-# Start the gluster-node application\n\
-exec /usr/local/bin/gluster-node\n\
-' > /usr/local/bin/start-node.sh && chmod +x /usr/local/bin/start-node.sh
+# Copy and setup the startup script
+COPY scripts/start-node.sh /usr/local/bin/start-node.sh
+RUN chmod +x /usr/local/bin/start-node.sh
 
 CMD ["/usr/local/bin/start-node.sh"]
