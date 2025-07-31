@@ -1,6 +1,6 @@
-FROM golang:1.21-alpine as builder
+# Stage 1: Build the Go application
+FROM golang:1.21-alpine AS go-builder
 
-# Build the Go application
 WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
@@ -8,22 +8,17 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o gluster-node ./cmd/gluster-node
 
-# Production image - use minimal Ubuntu
-FROM ubuntu:22.04
+# Stage 2: Use official GlusterFS Fedora image for runtime (more current)
+# Force AMD64 platform to avoid compatibility issues on ARM64 Macs
+FROM --platform=linux/amd64 gluster/gluster-fedora:latest
 
-# Avoid interactive prompts during package installation
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install GlusterFS from Ubuntu repositories
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+# Install additional tools needed for our Go application (skip update for speed)
+RUN dnf install -y \
     curl \
     ca-certificates \
-    glusterfs-server \
-    glusterfs-client \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /var/cache/apt/*
+    which \
+    procps-ng \
+    && dnf clean all
 
 # Create necessary directories
 RUN mkdir -p /data/glusterfs \
@@ -31,26 +26,17 @@ RUN mkdir -p /data/glusterfs \
     && mkdir -p /var/lib/glusterd \
     && mkdir -p /etc/supervisor/conf.d
 
-# Create gluster user
-RUN adduser -D -s /bin/false gluster || true
-
-# Set permissions
+# The gluster user should already exist in the official image
+# Set permissions for data directory
 RUN chown -R gluster:gluster /data/glusterfs \
     && chmod -R 755 /data/glusterfs
 
-# Copy the built binary
-COPY --from=builder /build/gluster-node /usr/local/bin/gluster-node
+# Copy the built binary from go-builder stage
+COPY --from=go-builder /build/gluster-node /usr/local/bin/gluster-node
 RUN chmod +x /usr/local/bin/gluster-node
 
-# Create supervisor directory and configuration for glusterd
-RUN mkdir -p /etc/supervisor/conf.d && \
-    echo '[program:glusterd]\n\
-command=/usr/sbin/glusterd --no-daemon\n\
-autostart=true\n\
-autorestart=true\n\
-stderr_logfile=/var/log/glusterfs/glusterd.log\n\
-stdout_logfile=/var/log/glusterfs/glusterd.log\n\
-' > /etc/supervisor/conf.d/glusterd.conf
+# GlusterFS should already be configured in the official image
+# We just need to ensure our directories exist
 
 # Expose GlusterFS ports
 EXPOSE 24007 24008 24009 24010 49152 49153 49154 49155 49156 49157 49158 49159
@@ -66,24 +52,25 @@ ENV CLUSTER_NAME="gluster-cluster"
 ENV GLUSTER_DATA_PATH="/data/glusterfs"
 ENV GLUSTER_LOG_LEVEL="info"
 
-# Create startup script that starts glusterd directly
-RUN echo '#!/bin/bash\n\
+# Create startup script that uses the official image's glusterd setup
+RUN printf '#!/bin/bash\n\
 set -e\n\
 echo "Starting GlusterFS node: $NODE_NAME"\n\
 \n\
-# Create required directories\n\
+# Ensure required directories exist\n\
 mkdir -p /var/log/glusterfs\n\
 mkdir -p /var/lib/glusterd\n\
 mkdir -p /data/glusterfs\n\
 \n\
-# Start glusterd in background\n\
-glusterd --pid-file=/var/run/glusterd.pid --log-file=/var/log/glusterfs/glusterd.log &\n\
-\n\
-# Wait for glusterd to start\n\
-sleep 5\n\
+# Start glusterd (official image may have its own startup)\n\
+if ! pgrep -x "glusterd" > /dev/null; then\n\
+    echo "Starting glusterd..."\n\
+    /usr/sbin/glusterd --pid-file=/var/run/glusterd.pid --log-file=/var/log/glusterfs/glusterd.log &\n\
+    sleep 5\n\
+fi\n\
 \n\
 # Start the gluster-node application\n\
 exec /usr/local/bin/gluster-node\n\
-' > /start-node.sh && chmod +x /start-node.sh
+' > /usr/local/bin/start-node.sh && chmod +x /usr/local/bin/start-node.sh
 
-CMD ["/start-node.sh"]
+CMD ["/usr/local/bin/start-node.sh"]

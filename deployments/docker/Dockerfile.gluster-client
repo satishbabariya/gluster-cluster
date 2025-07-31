@@ -1,26 +1,25 @@
-FROM ubuntu:22.04
+# Use official GlusterFS Fedora-based image for latest GlusterFS version
+# Force AMD64 platform to avoid compatibility issues on ARM64 Macs
+FROM --platform=linux/amd64 gluster/gluster-fedora:latest
 
-# Avoid interactive prompts during package installation
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install GlusterFS client from Ubuntu repositories
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+# Install additional tools for our use case (client functionality already included)
+# Skip update for faster builds, just install what we need
+RUN dnf install -y \
     curl \
     ca-certificates \
+    which \
+    procps-ng \
+    iputils \
+    bash \
     fuse \
-    iputils-ping \
-    glusterfs-client \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /var/cache/apt/*
+    && dnf clean all
 
 # Create mount directories
 RUN mkdir -p /mnt/shared \
     && mkdir -p /mnt/glusterfs
 
-# Enable FUSE
-RUN echo 'user_allow_other' >> /etc/fuse.conf
+# Enable FUSE (may already be configured in official image)
+RUN echo 'user_allow_other' >> /etc/fuse.conf || true
 
 # Environment variables
 ENV GLUSTER_CLUSTER_NAME="gluster-cluster"
@@ -30,11 +29,11 @@ ENV MOUNT_POINT="/mnt/shared"
 ENV RETRY_COUNT="30"
 ENV RETRY_DELAY="5"
 
-# Create mount script
-RUN echo '#!/bin/bash\n\
+# Create enhanced mount script for official GlusterFS client image
+RUN printf '#!/bin/bash\n\
 set -e\n\
 \n\
-echo "Starting GlusterFS client..."\n\
+echo "Starting GlusterFS client with official image..."\n\
 echo "Cluster: $GLUSTER_CLUSTER_NAME"\n\
 echo "Server: $GLUSTER_SERVER"\n\
 echo "Volume: $GLUSTER_VOLUME"\n\
@@ -45,7 +44,11 @@ echo "Waiting for GlusterFS server to be ready..."\n\
 for i in $(seq 1 $RETRY_COUNT); do\n\
     if ping -c 1 $GLUSTER_SERVER > /dev/null 2>&1; then\n\
         echo "Server $GLUSTER_SERVER is reachable"\n\
-        break\n\
+        # Additional check: test gluster port\n\
+        if timeout 5 bash -c "</dev/tcp/$GLUSTER_SERVER/24007" 2>/dev/null; then\n\
+            echo "GlusterFS port 24007 is accessible"\n\
+            break\n\
+        fi\n\
     fi\n\
     echo "Waiting for server... (attempt $i/$RETRY_COUNT)"\n\
     sleep $RETRY_DELAY\n\
@@ -57,9 +60,9 @@ sleep 30\n\
 # Create mount point\n\
 mkdir -p "$MOUNT_POINT"\n\
 \n\
-# Mount the volume\n\
-echo "Mounting GlusterFS volume..."\n\
-mount -t glusterfs "$GLUSTER_SERVER:/$GLUSTER_VOLUME" "$MOUNT_POINT"\n\
+# Mount the volume using the latest GlusterFS client\n\
+echo "Mounting GlusterFS volume with official client..."\n\
+mount.glusterfs "$GLUSTER_SERVER:/$GLUSTER_VOLUME" "$MOUNT_POINT"\n\
 \n\
 if mount | grep -q "$GLUSTER_SERVER:/$GLUSTER_VOLUME"; then\n\
     echo "Successfully mounted GlusterFS volume!"\n\
@@ -72,15 +75,16 @@ fi\n\
 \n\
 # Set permissions\n\
 chmod 755 "$MOUNT_POINT"\n\
+chown root:root "$MOUNT_POINT"\n\
 \n\
-echo "GlusterFS client setup completed!"\n\
+echo "GlusterFS client setup completed with official image!"\n\
 \n\
 # Keep container running\n\
 tail -f /dev/null\n\
-' > /mount-gluster.sh && chmod +x /mount-gluster.sh
+' > /usr/local/bin/mount-gluster.sh && chmod +x /usr/local/bin/mount-gluster.sh
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD mount | grep glusterfs || exit 1
 
-CMD ["/mount-gluster.sh"]
+CMD ["/usr/local/bin/mount-gluster.sh"]

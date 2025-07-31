@@ -1,23 +1,31 @@
-FROM golang:1.21-alpine as builder
+# Stage 1: Build the Go application
+FROM golang:1.21-alpine AS go-builder
 
-# Build the Go application
+# Install git for Go modules that might need it
+RUN apk add --no-cache git
+
 WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o gluster-manager ./cmd/gluster-manager
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o gluster-manager ./cmd/gluster-manager
 
-# Production image
+# Stage 2: Production image with minimal footprint
 FROM alpine:latest
 
-# Install required packages
-RUN apk --no-cache add ca-certificates docker-cli
+# Install required packages for cluster management
+RUN apk --no-cache add \
+    ca-certificates \
+    docker-cli \
+    curl \
+    bash \
+    && rm -rf /var/cache/apk/*
 
 WORKDIR /app
 
-# Copy the built binary
-COPY --from=builder /build/gluster-manager /usr/local/bin/gluster-manager
+# Copy the built binary from go-builder stage
+COPY --from=go-builder /build/gluster-manager /usr/local/bin/gluster-manager
 RUN chmod +x /usr/local/bin/gluster-manager
 
 # Environment variables
