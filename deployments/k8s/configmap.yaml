@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gluster-config
+  namespace: gluster-system
+data:
+  GLUSTER_CLUSTER_NAME: "gluster-cluster"
+  GLUSTER_NODE_IPS: "172.20.0.10,172.20.0.11,172.20.0.12"
+  GLUSTER_REPLICA_COUNT: "3"
+  GLUSTER_NETWORK_SUBNET: "172.20.0.0/16"
+  GLUSTER_DATA_PATH: "/data/glusterfs"
+  GLUSTER_VOLUMES: "shared:replicated:3:/mnt/shared:/mnt/shared"
+  GLUSTER_LOG_LEVEL: "info"
+  GLUSTER_CACHE_SIZE: "256MB"
+  GLUSTER_WRITE_BUFFER_SIZE: "4MB"

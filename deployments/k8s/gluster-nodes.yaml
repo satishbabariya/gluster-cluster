@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: gluster-nodes
+  namespace: gluster-system
+spec:
+  serviceName: gluster-nodes
+  replicas: 3
+  selector:
+    matchLabels:
+      app: gluster-node
+  template:
+    metadata:
+      labels:
+        app: gluster-node
+    spec:
+      securityContext:
+        privileged: true
+      containers:
+      - name: gluster-node
+        image: gluster-cluster/node:latest
+        securityContext:
+          privileged: true
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NODE_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: CLUSTER_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: gluster-config
+              key: GLUSTER_CLUSTER_NAME
+        - name: GLUSTER_DATA_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: gluster-config
+              key: GLUSTER_DATA_PATH
+        - name: GLUSTER_LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: gluster-config
+              key: GLUSTER_LOG_LEVEL
+        ports:
+        - containerPort: 24007
+          name: glusterd
+        - containerPort: 49152
+          name: gluster-brick
+        volumeMounts:
+        - name: gluster-data
+          mountPath: /data/glusterfs
+        - name: sys-fs-cgroup
+          mountPath: /sys/fs/cgroup
+          readOnly: true
+      volumes:
+      - name: sys-fs-cgroup
+        hostPath:
+          path: /sys/fs/cgroup
+  volumeClaimTemplates:
+  - metadata:
+      name: gluster-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gluster-nodes
+  namespace: gluster-system
+spec:
+  clusterIP: None
+  selector:
+    app: gluster-node
+  ports:
+  - name: glusterd
+    port: 24007
+    targetPort: 24007
+  - name: gluster-brick
+    port: 49152
+    targetPort: 49152

@@ -1,0 +1,35 @@
+FROM golang:1.21-alpine as builder
+
+# Build the Go application
+WORKDIR /build
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o gluster-manager ./cmd/gluster-manager
+
+# Production image
+FROM alpine:latest
+
+# Install required packages
+RUN apk --no-cache add ca-certificates docker-cli
+
+WORKDIR /app
+
+# Copy the built binary
+COPY --from=builder /build/gluster-manager /usr/local/bin/gluster-manager
+RUN chmod +x /usr/local/bin/gluster-manager
+
+# Environment variables
+ENV GLUSTER_LOG_LEVEL="info"
+ENV GLUSTER_CLUSTER_NAME="gluster-cluster"
+ENV GLUSTER_REPLICA_COUNT="3"
+ENV GLUSTER_NETWORK_SUBNET="172.20.0.0/16"
+ENV GLUSTER_NETWORK_NAME="gluster-net"
+ENV GLUSTER_DATA_PATH="/data/glusterfs"
+
+# Create non-root user
+RUN adduser -D -s /bin/sh gluster-manager
+USER gluster-manager
+
+CMD ["gluster-manager", "start"]

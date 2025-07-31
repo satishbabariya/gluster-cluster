@@ -1,0 +1,93 @@
+FROM ubuntu:20.04
+
+# Avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install GlusterFS client and dependencies
+RUN apt-get update && \
+    apt-get install -y \
+    software-properties-common \
+    wget \
+    curl \
+    net-tools \
+    iputils-ping \
+    vim \
+    fuse \
+    ca-certificates \
+    && add-apt-repository ppa:gluster/glusterfs-10 \
+    && apt-get update \
+    && apt-get install -y \
+    glusterfs-client \
+    glusterfs-common \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create mount directories
+RUN mkdir -p /mnt/shared \
+    && mkdir -p /mnt/glusterfs
+
+# Enable FUSE
+RUN echo 'user_allow_other' >> /etc/fuse.conf
+
+# Environment variables
+ENV GLUSTER_CLUSTER_NAME="gluster-cluster"
+ENV GLUSTER_SERVER=""
+ENV GLUSTER_VOLUME="shared"
+ENV MOUNT_POINT="/mnt/shared"
+ENV RETRY_COUNT="30"
+ENV RETRY_DELAY="5"
+
+# Create mount script
+RUN echo '#!/bin/bash\n\
+set -e\n\
+\n\
+echo "Starting GlusterFS client..."\n\
+echo "Cluster: $GLUSTER_CLUSTER_NAME"\n\
+echo "Server: $GLUSTER_SERVER"\n\
+echo "Volume: $GLUSTER_VOLUME"\n\
+echo "Mount Point: $MOUNT_POINT"\n\
+\n\
+# Wait for GlusterFS server to be ready\n\
+echo "Waiting for GlusterFS server to be ready..."\n\
+for i in $(seq 1 $RETRY_COUNT); do\n\
+    if ping -c 1 $GLUSTER_SERVER > /dev/null 2>&1; then\n\
+        echo "Server $GLUSTER_SERVER is reachable"\n\
+        break\n\
+    fi\n\
+    echo "Waiting for server... (attempt $i/$RETRY_COUNT)"\n\
+    sleep $RETRY_DELAY\n\
+done\n\
+\n\
+# Wait additional time for GlusterFS to be fully ready\n\
+sleep 30\n\
+\n\
+# Create mount point\n\
+mkdir -p "$MOUNT_POINT"\n\
+\n\
+# Mount the volume\n\
+echo "Mounting GlusterFS volume..."\n\
+mount -t glusterfs "$GLUSTER_SERVER:/$GLUSTER_VOLUME" "$MOUNT_POINT"\n\
+\n\
+if mount | grep -q "$GLUSTER_SERVER:/$GLUSTER_VOLUME"; then\n\
+    echo "Successfully mounted GlusterFS volume!"\n\
+    echo "Mount point: $MOUNT_POINT"\n\
+    ls -la "$MOUNT_POINT/"\n\
+else\n\
+    echo "ERROR: Failed to mount GlusterFS volume"\n\
+    exit 1\n\
+fi\n\
+\n\
+# Set permissions\n\
+chmod 755 "$MOUNT_POINT"\n\
+\n\
+echo "GlusterFS client setup completed!"\n\
+\n\
+# Keep container running\n\
+tail -f /dev/null\n\
+' > /mount-gluster.sh && chmod +x /mount-gluster.sh
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD mount | grep glusterfs || exit 1
+
+CMD ["/mount-gluster.sh"]
