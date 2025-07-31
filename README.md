@@ -1,369 +1,177 @@
-# GlusterFS Sync Utility
+# GlusterFS Sync CLI
 
-A Go-based, plug-and-play GlusterFS cluster management utility for multi-node environments with Docker support. This utility provides shared and replicated storage across nodes, making it easy to mount volumes like `/mnt/shared/tomcat-resources:/opt/tomcat/webapps/zenoptics/resources:rw` with automatic replication and synchronization.
+A simple, user-friendly CLI tool that sets up GlusterFS clusters using Docker. Just run it on any machine and it will help you create or join a distributed file system.
 
-## Features
+## 🚀 Features
 
-- 🚀 **Plug-and-Play**: Easy deployment with Docker images from registry
-- 🔧 **Environment-Based Configuration**: Manage everything via environment variables
-- 🔄 **Automatic Replication**: Built-in data replication across nodes
-- 📊 **Cluster Management**: Start, stop, monitor cluster with simple commands
-- 🐳 **Docker Native**: Full Docker and Docker Compose support
-- ☸️ **Kubernetes Ready**: Kubernetes manifests included
-- 📈 **Scalable**: Support for 3+ node clusters
-- 🛡️ **Production Ready**: Health checks, logging, and monitoring
+- **Simple Setup**: One command to set up a GlusterFS node
+- **Interactive**: Prompts for local folder and peer IPs
+- **Docker-based**: No complex installation, just needs Docker
+- **Cross-platform**: Works on any system with Docker
+- **User-friendly**: Clear prompts and status messages
 
-## Quick Start
+## 📦 Installation
 
-### 1. Pull Images from Registry
-
+### Option 1: Download Binary (Recommended)
 ```bash
-# Pull the latest images (peer-to-peer architecture)
-docker pull gluster-cluster/node:latest
-docker pull gluster-cluster/client:latest
+# Download the latest release
+curl -L https://github.com/your-repo/gluster-sync-cli/releases/latest/download/gluster-sync -o gluster-sync
+chmod +x gluster-sync
 ```
 
-### 2. Set Environment Variables
-
-Create your environment configuration:
-
+### Option 2: Build from Source
 ```bash
-# Copy example configuration
-cp examples/environment-variables.txt .env
-
-# Edit the configuration
-export GLUSTER_CLUSTER_NAME=my-app-cluster
-export GLUSTER_NODE_IPS=172.20.0.10,172.20.0.11,172.20.0.12
-export GLUSTER_REPLICA_COUNT=3
-export GLUSTER_VOLUMES="shared:replicated:3:/mnt/shared/tomcat-resources:/opt/tomcat/webapps/zenoptics/resources"
+git clone https://github.com/your-repo/gluster-sync-cli
+cd gluster-sync-cli
+go build -o gluster-sync main.go
 ```
 
-### 3. Start the Cluster
+## 🎯 Quick Start
 
+### Step 1: Set up first node
 ```bash
-# Using Makefile
-make start
-
-# Or using Docker Compose directly
-docker-compose -f deployments/docker/docker-compose.yml up -d
+./gluster-sync setup
 ```
 
-### 4. Use Shared Storage
+The CLI will ask you:
+1. **Local folder path** - Which folder to sync (e.g., `/home/user/shared`)
+2. **Peer IPs** - Leave empty for the first node, OR enter ALL planned node IPs
 
-Your application containers can now use the shared volume:
-
-```yaml
-services:
-  my-app:
-    image: tomcat:9-jre11
-    volumes:
-      - /mnt/shared/tomcat-resources:/opt/tomcat/webapps/zenoptics/resources:rw
-```
-
-## Environment Variables Configuration
-
-### Core Settings
-
-| Variable | Description | Default | Example |
-|----------|-------------|---------|---------|
-| `GLUSTER_CLUSTER_NAME` | Name of the cluster | `gluster-cluster` | `my-app-cluster` |
-| `GLUSTER_NODE_IPS` | Comma-separated node IPs | `172.20.0.10,172.20.0.11,172.20.0.12` | `192.168.1.10,192.168.1.11,192.168.1.12` |
-| `GLUSTER_REPLICA_COUNT` | Number of replicas | `3` | `5` |
-| `GLUSTER_NETWORK_SUBNET` | Docker network subnet | `172.20.0.0/16` | `192.168.100.0/24` |
-
-### Volume Configuration
-
-Configure volumes using the `GLUSTER_VOLUMES` environment variable:
-
-**Format**: `name:type:replica_count:host_paths:mount_point;volume2:...`
-
-**Examples**:
+### Step 2: Set up additional nodes
+On other machines:
 ```bash
-# Single shared volume
-GLUSTER_VOLUMES="shared:replicated:3:/mnt/shared:/mnt/shared"
-
-# Multiple volumes
-GLUSTER_VOLUMES="shared:replicated:3:/mnt/shared:/mnt/shared;data:replicated:3:/mnt/data:/mnt/data"
-
-# For your Tomcat use case
-GLUSTER_VOLUMES="shared:replicated:3:/mnt/shared/tomcat-resources:/opt/tomcat/webapps/zenoptics/resources"
+./gluster-sync setup
 ```
 
-### Docker Images
+The CLI will ask you:
+1. **Local folder path** - Same or different folder to sync
+2. **Peer IPs** - Enter ALL node IPs (including the first node and this node)
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `GLUSTER_NODE_IMAGE` | GlusterFS node image | `gluster-cluster/node:latest` |
-| ~~`GLUSTER_MANAGER_IMAGE`~~ | **Removed** - Peer-to-peer architecture | N/A - No manager needed |
-| `GLUSTER_CLIENT_IMAGE` | GlusterFS client image | `gluster-cluster/client:latest` |
+💡 **Pro Tip**: You can enter all IPs at once using comma-separated format:
+`192.168.1.10,192.168.1.20,192.168.1.30`
 
-## Usage Examples
-
-### Basic 3-Node Cluster
-
+### Step 3: Check status
 ```bash
-# Set environment variables
-export GLUSTER_CLUSTER_NAME=basic-cluster
-export GLUSTER_NODE_IPS=172.20.0.10,172.20.0.11,172.20.0.12
-export GLUSTER_REPLICA_COUNT=3
-export GLUSTER_VOLUMES="shared:replicated:3:/mnt/shared:/mnt/shared"
-
-# Start cluster
-make start
-
-# Check status
-make status
+./gluster-sync status
 ```
 
-### Tomcat Application with Shared Resources
+## 📋 Commands
 
+| Command | Description |
+|---------|-------------|
+| `setup` | Interactive setup of a GlusterFS node |
+| `status` | Show cluster and container status |
+| `remove` | Stop and remove the GlusterFS container |
+| `--help` | Show help information |
+
+## 🔧 How it works
+
+1. **Creates a Docker container** running GlusterFS on each machine
+2. **Mounts your local folder** into the container
+3. **Connects nodes** using GlusterFS peer probing
+4. **Automatically replicates files** between all nodes
+5. **Files added to the local folder** appear on all other nodes
+
+## 📁 Example Workflow
+
+### Option 1: Progressive Setup (Node by Node)
 ```bash
-# Configure for Tomcat
-export GLUSTER_CLUSTER_NAME=tomcat-cluster
-export GLUSTER_VOLUMES="resources:replicated:3:/mnt/shared/tomcat-resources:/opt/tomcat/webapps/zenoptics/resources"
+# Machine 1 (192.168.1.10)
+./gluster-sync setup
+# Enter local folder: /home/user/documents
+# Enter peer IPs: (leave empty - first node)
 
-# Start with Tomcat example
-make example-tomcat
+# Machine 2 (192.168.1.20)  
+./gluster-sync setup
+# Enter local folder: /home/user/shared
+# Enter peer IPs: 192.168.1.10
+
+# Machine 3 (192.168.1.30)
+./gluster-sync setup  
+# Enter local folder: /opt/shared-data
+# Enter peer IPs: 192.168.1.10
+
+# Now all three folders are synced!
 ```
 
-### 5-Node High Availability Cluster
-
+### Option 2: Cluster-wide Setup (Recommended)
 ```bash
-export GLUSTER_CLUSTER_NAME=ha-cluster
-export GLUSTER_NODE_IPS=172.20.0.10,172.20.0.11,172.20.0.12,172.20.0.13,172.20.0.14
-export GLUSTER_REPLICA_COUNT=5
-export GLUSTER_VOLUMES="data:replicated:5:/mnt/data:/mnt/data"
+# On ALL machines, use the same IP list:
+./gluster-sync setup
+# Enter local folder: [respective folder]
+# All peer IPs: 192.168.1.10,192.168.1.20,192.168.1.30
 
-# Generate and start 5-node configuration
-make generate-5-node
-docker-compose -f docker-compose-5node.yml up -d
+# Benefits:
+# ✅ Every node knows about every other node
+# ✅ Better fault tolerance
+# ✅ Perfect mesh topology
 ```
 
-## Management Commands
+## 🛠️ Requirements
 
-### Using Makefile
+- **Docker** installed and running
+- **Network connectivity** between machines
+- **Ports 24007 and 49152** open for GlusterFS communication
 
+## ❓ FAQ
+
+**Q: What happens if a node goes down?**  
+A: Other nodes continue working. When the node comes back up, files sync automatically.
+
+**Q: Can I use different local folders on each machine?**  
+A: Yes! Each machine can have a different local path.
+
+**Q: How do I add a new machine to an existing cluster?**  
+A: Just run `./gluster-sync setup` and enter any existing node's IP.
+
+**Q: How do I remove a node from the cluster?**  
+A: Run `./gluster-sync remove` on that machine.
+
+## 🔍 Troubleshooting
+
+**Container won't start:**
 ```bash
-# Build images
-make build
+# Check Docker is running
+docker ps
 
-# Start cluster
-make start
-
-# Check status
-make status
-
-# View logs
-make logs
-
-# Stop cluster
-make stop
-
-# Clean up
-make clean
-
-# Run tests
-make test
+# Check if port is available
+netstat -tulpn | grep 24007
 ```
 
-### Using Docker Compose
-
+**Can't connect to peers:**
 ```bash
-# Start cluster
-docker-compose -f deployments/docker/docker-compose.yml up -d
+# Check network connectivity
+ping <peer-ip>
 
-# Check status
-docker-compose -f deployments/docker/docker-compose.yml ps
-
-# View logs
-docker-compose -f deployments/docker/docker-compose.yml logs -f
-
-# Stop cluster
-docker-compose -f deployments/docker/docker-compose.yml down
+# Check firewall allows ports 24007 and 49152
 ```
 
-### Using the Go CLI
-
+**Files not syncing:**
 ```bash
-# Build the CLI tools
-make dev-build
+# Check cluster status
+./gluster-sync status
 
-# Test node binary
-./bin/gluster-node --help
-
-# Peer-to-peer management (no separate manager needed):
-docker exec gluster-cluster-node1 gluster peer probe gluster-cluster-node2
-docker exec gluster-cluster-node1 gluster volume create shared replica 3 ...
-docker exec gluster-cluster-node1 gluster volume start shared
-docker exec gluster-cluster-node1 gluster volume status shared
+# Check container logs
+docker logs glusterfs-node
 ```
 
-## Kubernetes Deployment
-
-Deploy to Kubernetes with environment-based configuration:
-
-```bash
-# Deploy to Kubernetes
-kubectl apply -f deployments/k8s/
-
-# Check status
-kubectl get all -n gluster-system
-
-# Update configuration
-kubectl edit configmap gluster-config -n gluster-system
-
-# Delete deployment
-kubectl delete -f deployments/k8s/
-```
-
-## Custom Configuration
-
-### Using Configuration File
-
-Create `gluster-config.yaml`:
-
-```yaml
-cluster_name: "my-cluster"
-node_ips:
-  - "172.20.0.10"
-  - "172.20.0.11"
-  - "172.20.0.12"
-replica_count: 3
-volumes:
-  - name: "shared"
-    type: "replicated"
-    replica_count: 3
-    host_paths:
-      - "/mnt/shared/tomcat-resources"
-    mount_point: "/opt/tomcat/webapps/zenoptics/resources"
-    options:
-      "performance.cache-size": "512MB"
-```
-
-### Using Docker Registry
-
-Push to your own registry:
-
-```bash
-# Build and tag for your registry
-make build REGISTRY=your-registry.com/gluster-cluster
-
-# Push to registry
-make push REGISTRY=your-registry.com/gluster-cluster
-
-# Use in deployment
-export GLUSTER_NODE_IMAGE=your-registry.com/gluster-cluster/node:latest
-# Manager removed - peer-to-peer architecture
-```
-
-## Architecture
+## 🏗️ Architecture
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   GlusterFS     │    │   GlusterFS     │    │   GlusterFS     │
-│     Node 1      │◄──►│     Node 2      │◄──►│     Node 3      │
-│ (172.20.0.10)   │    │ (172.20.0.11)   │    │ (172.20.0.12)   │
+│   Machine 1     │    │   Machine 2     │    │   Machine 3     │
+│                 │    │                 │    │                 │
+│ /home/docs/ ────┼────┼─── /opt/data/ ──┼────┼─── /tmp/sync/   │
+│                 │    │                 │    │                 │
+│ [GlusterFS]     │    │ [GlusterFS]     │    │ [GlusterFS]     │
+│                 │    │                 │    │                 │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
-         ▲                       ▲                       ▲
-         │                       │                       │
-         └───────────────────────┼───────────────────────┘
-                                 │
-                    ┌─────────────────┐
-                    │     Cluster     │
-                    │     Manager     │
-                    │ (Go Application)│
-                    └─────────────────┘
-                                 │
-                    ┌─────────────────┐
-                    │   Application   │
-                    │   Containers    │
-                    │ (Tomcat, etc.)  │
-                    └─────────────────┘
+         ↑                       ↑                       ↑
+    Docker Container       Docker Container       Docker Container
 ```
 
-## Monitoring and Troubleshooting
+Files added to any folder automatically appear in all other folders across all machines.
 
-### Health Checks
+## 📄 License
 
-```bash
-# Check cluster health
-make status
-
-# View detailed logs
-make logs
-
-# Test cluster connectivity
-make test
-
-# Check specific node
-docker exec gluster-cluster-node1 gluster peer status
-docker exec gluster-cluster-node1 gluster volume status
-```
-
-### Common Issues
-
-1. **Nodes not connecting**: Check network connectivity and firewall rules
-2. **Volume mount fails**: Ensure GlusterFS client is properly configured
-3. **Performance issues**: Adjust cache settings and replica count
-4. **Split-brain scenarios**: Use healing commands to resolve
-
-### Logging
-
-Logs are available at multiple levels:
-
-```bash
-# Container logs
-docker logs gluster-cluster-node1
-
-# GlusterFS logs (inside container)
-docker exec gluster-cluster-node1 tail -f /var/log/glusterfs/glusterd.log
-
-# Application logs
-export GLUSTER_LOG_LEVEL=debug
-```
-
-## Building from Source
-
-```bash
-# Clone repository
-git clone https://github.com/your-org/gluster-cluster
-cd gluster-cluster
-
-# Setup development environment
-make dev-setup
-
-# Build binaries
-make dev-build
-
-# Run tests
-make dev-test
-
-# Build Docker images
-make build
-
-# Push to registry
-make push REGISTRY=your-registry.com/gluster-cluster
-```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Ensure all tests pass
-5. Submit a pull request
-
-## License
-
-MIT License - see LICENSE file for details.
-
-## Support
-
-For issues and questions:
-- Create an issue on GitHub
-- Check the troubleshooting section
-- Review logs for error details
-
----
-
-**Ready to use shared, replicated storage in your multi-node environment? Just set your environment variables and run `make start`!** 🚀
+MIT License - feel free to use this in your projects!
