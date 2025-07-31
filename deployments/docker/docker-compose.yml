@@ -15,7 +15,7 @@ services:
       - ./config:/config
     environment:
       - GLUSTER_CLUSTER_NAME=${GLUSTER_CLUSTER_NAME:-gluster-cluster}
-      - GLUSTER_NODE_IPS=${GLUSTER_NODE_IPS:-172.20.0.10,172.20.0.11,172.20.0.12}
+      - GLUSTER_NODE_IPS=${GLUSTER_NODE_IPS:-192.168.100.10,192.168.100.11,192.168.100.12}
       - GLUSTER_REPLICA_COUNT=${GLUSTER_REPLICA_COUNT:-3}
       - GLUSTER_NETWORK_SUBNET=${GLUSTER_NETWORK_SUBNET:-172.20.0.0/16}
       - GLUSTER_NETWORK_NAME=${GLUSTER_NETWORK_NAME:-gluster-net}
@@ -39,19 +39,19 @@ services:
     privileged: true
     networks:
       gluster-net:
-        ipv4_address: 172.20.0.10
+        ipv4_address: 192.168.100.10
     volumes:
-      - ${GLUSTER_CLUSTER_NAME:-gluster-cluster}-node1-data:${GLUSTER_DATA_PATH:-/data/glusterfs}
+      - gluster-cluster-node1-data:${GLUSTER_DATA_PATH:-/data/glusterfs}
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     environment:
       - NODE_NAME=${GLUSTER_CLUSTER_NAME:-gluster-cluster}-node1
-      - NODE_IP=172.20.0.10
+      - NODE_IP=192.168.100.10
       - CLUSTER_NAME=${GLUSTER_CLUSTER_NAME:-gluster-cluster}
       - GLUSTER_DATA_PATH=${GLUSTER_DATA_PATH:-/data/glusterfs}
       - GLUSTER_LOG_LEVEL=${GLUSTER_LOG_LEVEL:-info}
     ports:
-      - "${GLUSTER_NODE1_PORT:-24007}:24007"
-      - "${GLUSTER_NODE1_BRICK_PORT:-49152}:49152"
+      - "${GLUSTER_NODE1_PORT:-25007}:24007"
+      - "${GLUSTER_NODE1_BRICK_PORT:-50152}:49152"
     restart: unless-stopped
 
   gluster-node2:
@@ -64,19 +64,19 @@ services:
     privileged: true
     networks:
       gluster-net:
-        ipv4_address: 172.20.0.11
+        ipv4_address: 192.168.100.11
     volumes:
-      - ${GLUSTER_CLUSTER_NAME:-gluster-cluster}-node2-data:${GLUSTER_DATA_PATH:-/data/glusterfs}
+      - gluster-cluster-node2-data:${GLUSTER_DATA_PATH:-/data/glusterfs}
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     environment:
       - NODE_NAME=${GLUSTER_CLUSTER_NAME:-gluster-cluster}-node2
-      - NODE_IP=172.20.0.11
+      - NODE_IP=192.168.100.11
       - CLUSTER_NAME=${GLUSTER_CLUSTER_NAME:-gluster-cluster}
       - GLUSTER_DATA_PATH=${GLUSTER_DATA_PATH:-/data/glusterfs}
       - GLUSTER_LOG_LEVEL=${GLUSTER_LOG_LEVEL:-info}
     ports:
-      - "${GLUSTER_NODE2_PORT:-24008}:24007"
-      - "${GLUSTER_NODE2_BRICK_PORT:-49153}:49152"
+      - "${GLUSTER_NODE2_PORT:-25008}:24007"
+      - "${GLUSTER_NODE2_BRICK_PORT:-50153}:49152"
     restart: unless-stopped
 
   gluster-node3:
@@ -89,19 +89,19 @@ services:
     privileged: true
     networks:
       gluster-net:
-        ipv4_address: 172.20.0.12
+        ipv4_address: 192.168.100.12
     volumes:
-      - ${GLUSTER_CLUSTER_NAME:-gluster-cluster}-node3-data:${GLUSTER_DATA_PATH:-/data/glusterfs}
+      - gluster-cluster-node3-data:${GLUSTER_DATA_PATH:-/data/glusterfs}
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     environment:
       - NODE_NAME=${GLUSTER_CLUSTER_NAME:-gluster-cluster}-node3
-      - NODE_IP=172.20.0.12
+      - NODE_IP=192.168.100.12
       - CLUSTER_NAME=${GLUSTER_CLUSTER_NAME:-gluster-cluster}
       - GLUSTER_DATA_PATH=${GLUSTER_DATA_PATH:-/data/glusterfs}
       - GLUSTER_LOG_LEVEL=${GLUSTER_LOG_LEVEL:-info}
     ports:
-      - "${GLUSTER_NODE3_PORT:-24009}:24007"
-      - "${GLUSTER_NODE3_BRICK_PORT:-49154}:49152"
+      - "${GLUSTER_NODE3_PORT:-25009}:24007"
+      - "${GLUSTER_NODE3_BRICK_PORT:-50154}:49152"
     restart: unless-stopped
 
   # Example Application using GlusterFS
@@ -147,14 +147,14 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: ${GLUSTER_NETWORK_SUBNET:-172.20.0.0/16}
+        - subnet: ${GLUSTER_NETWORK_SUBNET:-192.168.100.0/24}
 
 volumes:
-  ${GLUSTER_CLUSTER_NAME:-gluster-cluster}-node1-data:
+  gluster-cluster-node1-data:
     driver: local
-  ${GLUSTER_CLUSTER_NAME:-gluster-cluster}-node2-data:
+  gluster-cluster-node2-data:
     driver: local
-  ${GLUSTER_CLUSTER_NAME:-gluster-cluster}-node3-data:
+  gluster-cluster-node3-data:
     driver: local
   gluster-shared-volume:
     driver: local

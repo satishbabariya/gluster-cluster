@@ -1,26 +1,19 @@
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install GlusterFS client and dependencies
+# Install GlusterFS client from Ubuntu repositories
 RUN apt-get update && \
-    apt-get install -y \
-    software-properties-common \
-    wget \
+    apt-get install -y --no-install-recommends \
     curl \
-    net-tools \
-    iputils-ping \
-    vim \
-    fuse \
     ca-certificates \
-    && add-apt-repository ppa:gluster/glusterfs-10 \
-    && apt-get update \
-    && apt-get install -y \
+    fuse \
+    iputils-ping \
     glusterfs-client \
-    glusterfs-common \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /var/cache/apt/*
 
 # Create mount directories
 RUN mkdir -p /mnt/shared \
